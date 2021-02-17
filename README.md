@@ -15,3 +15,6 @@ Weather, temmperature, humidity, visibility, pressure, wind ... icons are conver
 - BtnL: Shutdown
 - BtnR: Refresh e-paper
 - BtnP: Time Synchronization with a NTP server
+## Project detail
+- Instructables: https://www.instructables.com/M5Paper-Weather-Station/
+- YouTube: https://www.youtube.com/watch?v=Mbq6BIsMcAs
