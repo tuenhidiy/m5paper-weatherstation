@@ -15,8 +15,8 @@
 #define timezone  7
 
 // Set location and API key
-String Location = "Vietnam,VN";
-String API_Key  = "b13100ab8d6be733ae9792921af0dc4e";
+String Location = "Vietnam,VN"; // Change to your location
+String API_Key  = "xxxxxxxxxxxxx";
 
 int wifi_signal;
 uint8_t global_time_synced = false;
