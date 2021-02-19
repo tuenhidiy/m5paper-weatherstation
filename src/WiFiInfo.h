@@ -2,6 +2,6 @@
 
 namespace WiFiInfo
 {
-  constexpr auto SSID = "FTPTelecom";
-  constexpr auto PASS = "12345689";
+  constexpr auto SSID = "FPTTelecom";
+  constexpr auto PASS = "12345678";
 } // namespace WiFiInfo
