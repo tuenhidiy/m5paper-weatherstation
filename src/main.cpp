@@ -39,8 +39,12 @@ const char* weatherIcon="";
 
 const char* upweatherId="";
 const char* upweatherMain="";
-const char* upweatherDesc="";
-const char* upweatherIcon="";
+
+//...I also had an error with the M5 object being overloaded between M5EPD and M5Stack.  I had to rename the epd version to M5e (did not include in push)
+
+//... NOTE.  Instead of a pointer into the json response keep a global variable to cache between weather api calls. (it will make it easier to rotate between locations eventually)
+String sWeatherDesc;
+String sWeatherIcon;
 
 time_t upsunrise, sunrise;
 time_t upsunset, sunset;
@@ -63,6 +67,10 @@ LGFX_Sprite WeatherIcons(&gfx);
 LGFX_Sprite WIcons(&gfx);
 LGFX_Sprite SRSSIcons(&gfx);
 
+//... make the counter global so it doesn't get recent on each execution
+static uint32_t cnt = 0;
+
+
 //#########################################################################################
 inline int syncNTPTimeVN(void)
 {
@@ -70,6 +78,7 @@ inline int syncNTPTimeVN(void)
   constexpr auto NTP_SERVER2 = "1.asia.pool.ntp.org";
   constexpr auto NTP_SERVER3 = "3.asia.pool.ntp.org";
   constexpr auto TIME_ZONE = "ICT-7";
+
 
   auto datetime_setter = [](const tm &datetime) {
     rtc_time_t time{
@@ -211,7 +220,9 @@ void setup(void)
   else
   {
     gfx.println("Failed to connect to a Wi-Fi network");
+    printf ( "failed to connect wifi\n" );
     delay(WAIT_ON_FAILURE);
+
   }
 
   xMutex = xSemaphoreCreateMutex();
@@ -225,6 +236,8 @@ void setup(void)
     gfx.println("Failed to create a task for buttons");
   }
   gfx.println("Init done");
+  printf ( "Init done\n" );
+
   delay(1000);
   gfx.setTextSize(FONT_SIZE_LARGE);
   prettyEpdRefresh(gfx);
@@ -245,17 +258,20 @@ void MakehttpRequest()
     {
       String payload = http.getString();   // Getting the request response payload
  
+      printf ( payload.c_str() );
+      printf ( "\n" );
       DynamicJsonBuffer jsonBuffer(512);
  
       // Parse JSON object
       JsonObject& root = jsonBuffer.parseObject(payload);
       if (!root.success())
       {
+        printf ( "cannot parse object" );
         // gfx.print("N/A"); // not initialized
         upweatherId   = weatherId;
         upweatherMain = weatherMain;
-        upweatherDesc = weatherDesc;
-        upweatherIcon = weatherIcon;
+        //upweatherDesc = weatherDesc;
+        //upweatherIcon = weatherIcon;
         upsunrise     = sunrise;
         upsunset      = sunset;
       return;
@@ -264,6 +280,9 @@ void MakehttpRequest()
       {
       // temp        = (int)(root["main"]["temp"]) - 273.15;            // Get temperature in °C
       // humidity    = root["main"]["humidity"];                        // Get humidity in %
+
+      tem = (float) (root["main"]["temp"]) - 273.15; 
+      hum = (float) (root["main"]["humidity"]);
       visibility = (uint_fast8_t)root["visibility"];                    // Get visibility in m
       pressure    = (uint_fast8_t)(root["main"]["pressure"]);           // Get pressure in bar
       wind_speed  = (float)(root["wind"]["speed"]);                     // Get wind speed in m/s
@@ -271,9 +290,16 @@ void MakehttpRequest()
 
       upweatherId   = (const char*)(root["weather"][0]["id"]);
       upweatherMain = (const char*)(root["weather"][0]["main"]);  
-      upweatherDesc = (const char*)(root["weather"][0]["description"]);
-      upweatherIcon = (const char*)(root["weather"][0]["icon"]);
- 
+      
+      //upweatherDesc = (const char*)(root["weather"][0]["description"]);
+      sWeatherDesc = (const char *) (root["weather"][0]["main"]);
+      printf ( " in update weather desc : %s \n", sWeatherDesc.c_str() );
+
+      //upweatherIcon = (const char*)(root["weather"][0]["icon"]);
+      //printf ( "in update weather icon : %s\n", upweatherIcon );
+      sWeatherIcon = (const char *) (root["weather"][0]["icon"]);
+      printf ( "in update weather icon : %s\n", sWeatherIcon.c_str() );
+
       upsunrise = (root["sys"]["sunrise"]);
       upsunset = (root["sys"]["sunset"]);
       }
@@ -283,29 +309,69 @@ void MakehttpRequest()
 //#########################################################################################
 void showTHPInfo(float temperature, float humidity, uint_fast8_t pressureinfo, uint_fast16_t offset_x, uint_fast16_t offset_y)
 {
+
+  M5.SHT30.UpdateData();
+  float t_tem = M5.SHT30.GetTemperature();
+  float t_hum = M5.SHT30.GetRelHumidity();
+
+//... changed to smaller icons for temperature and humidity to allow multiple temps (outdoor and indoor)
+
   // Print temperature value
   gfx.setCursor(offset_x, offset_y);
-  gfx.printf("%02.1f°C", temperature);
+  gfx.setTextSize(FONT_SIZE_MEDIUM);
+//  gfx.printf("%02.1f°C", temperature);
+  gfx.printf("%02.1f°F", (temperature * 9 / 5) + 32 );
+
+  gfx.setCursor(offset_x, offset_y + 50);
+  gfx.setTextSize(FONT_SIZE_SMALL);
+//  gfx.printf("%02.1f°C", t_tem);
+  gfx.printf("%02.1f°F", (t_tem * 9 / 5) + 32 );
+  
   // Print humidity value
   gfx.setCursor(offset_x + 190, offset_y);
+  gfx.setTextSize(FONT_SIZE_MEDIUM);
   gfx.printf("%02.1f%%", humidity);
+
+  gfx.setCursor(offset_x + 190, offset_y + 50);
+  gfx.setTextSize(FONT_SIZE_SMALL);
+  gfx.printf("%02.1f%%", t_hum);
+
   // Print pressure value
   gfx.setCursor(offset_x + 385, offset_y);
+  gfx.setTextSize(FONT_SIZE_MEDIUM);
   gfx.printf("%04d\r\n", pressureinfo);
   
   // Draw temperature icon
+/*
   THPIcons.createSprite(112, 128);
   THPIcons.setSwapBytes(true);
   THPIcons.fillSprite(WHITE);  
   THPIcons.pushImage(0, 0, 112, 128, (uint16_t *)Temperature112x128);
-  THPIcons.pushSprite(offset_x + 10, offset_y + 55);
+  THPIcons.pushSprite(offset_x + 10, offset_y + 55);  
+*/
+
+  THPIcons.createSprite(56, 64);
+  THPIcons.setSwapBytes(true);
+  THPIcons.fillSprite(WHITE);  
+  THPIcons.pushImage(0, 0, 56, 64, (uint16_t *)Temperature56x64);
+//  THPIcons.pushSprite(offset_x + 10, offset_y + 55);
+  THPIcons.pushSprite(offset_x + 10, offset_y + 95);
   
   // Draw humidity icon
+/*
   THPIcons.createSprite(88, 128);
   THPIcons.setSwapBytes(true);
   THPIcons.fillSprite(WHITE);
   THPIcons.pushImage(0, 0, 88, 128, (uint16_t *)Humidity88x128);
   THPIcons.pushSprite(offset_x + 200, offset_y + 55);
+*/
+
+  THPIcons.createSprite(44, 64);
+  THPIcons.setSwapBytes(true);
+  THPIcons.fillSprite(WHITE);
+  THPIcons.pushImage(0, 0, 44, 64, (uint16_t *)Humidity44x64);
+  THPIcons.pushSprite(offset_x + 200, offset_y + 95);
+
 
   // Draw pressure icon
   THPIcons.createSprite(128, 128);
@@ -571,13 +637,14 @@ void loop(void)
   constexpr uint_fast16_t SLEEP_SEC = 5;
   constexpr uint_fast32_t TIME_SYNC_CYCLE = 7 * 3600 * 24 / SLEEP_SEC;
 
-  static uint32_t cnt = 0;
+  //... moved to global
+  //static uint32_t cnt = 0;
 
   xSemaphoreTake(xMutex, portMAX_DELAY);
 
-  M5.SHT30.UpdateData();
-  tem = M5.SHT30.GetTemperature();
-  hum = M5.SHT30.GetRelHumidity();
+  //M5.SHT30.UpdateData();
+  //tem = M5.SHT30.GetTemperature();
+  //hum = M5.SHT30.GetRelHumidity();
 
   rtc_date_t date;
   rtc_time_t time;
@@ -595,16 +662,19 @@ void loop(void)
   
   weatherId   = upweatherId;
   weatherMain = upweatherMain;
-  weatherDesc = upweatherDesc;
-  weatherIcon = upweatherIcon;
+  //weatherDesc = upweatherDesc;
+  weatherDesc = sWeatherDesc.c_str();
+  //weatherIcon = upweatherIcon;
+  weatherIcon = sWeatherIcon.c_str();
   sunrise     = upsunrise;
   sunset      = upsunset;
 
   gfx.setCursor(0, offset_y);
   gfx.setClipRect(offset_x, offset_y, M5PAPER_WIDTH - offset_x, M5PAPER_HEIGHT - offset_y);
   gfx.setTextSize(FONT_SIZE_MEDIUM);
-  gfx.printf("Ho Chi Minh City, VN\r\n");
 
+  gfx.printf("Ho Chi Minh City, VN\r\n");
+  printf ( "weather : %s\n", weatherIcon );
   showWeatherInfo(weatherDesc, offset_x, offset_y + 50);
 
   showSunriseSunset(offset_x + 280, offset_y + 90);
@@ -655,7 +725,8 @@ void loop(void)
   gfx.setTextSize(FONT_SIZE_LARGE);
   gfx.endWrite();
 
-  cnt++;
+
+  printf ( "cnt : %u\n", cnt );
   if (cnt == TIME_SYNC_CYCLE)
   {
     syncNTPTimeVN();
@@ -663,6 +734,11 @@ void loop(void)
   }
   xSemaphoreGive(xMutex);
   delay(SLEEP_SEC * 1000);
-  MakehttpRequest();
+
+  if ( cnt % 50 == 0 ) 
+  {
+    MakehttpRequest();
+  }
+  cnt++;
 
 }
